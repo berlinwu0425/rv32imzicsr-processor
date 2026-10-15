@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL if_id_register.v
+prep -top if_id_register
+
+[files]
+../rtl/if_id_register.v

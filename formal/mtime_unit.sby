@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 20
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL mtime_unit.v
+prep -top mtime_unit
+
+[files]
+../rtl/mtime_unit.v

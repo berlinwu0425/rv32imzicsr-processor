@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 1
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL interrupt_priority_broken.v
+prep -top interrupt_priority_formal
+
+[files]
+/tmp/interrupt_priority_broken.v

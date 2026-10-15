@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 20
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL mtime_unit_broken2.v
+prep -top mtime_unit
+
+[files]
+/tmp/mtime_unit_broken2.v

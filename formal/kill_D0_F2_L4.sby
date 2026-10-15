@@ -1,0 +1,14 @@
+[options]
+mode prove
+depth 15
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL speculative_kill_model.v
+chparam -set D 0 -set F 2 -set L_LAT 4 speculative_kill_model
+prep -top speculative_kill_model
+
+[files]
+../rtl/speculative_kill_model.v

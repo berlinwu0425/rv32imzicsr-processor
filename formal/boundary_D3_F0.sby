@@ -1,0 +1,14 @@
+[options]
+mode prove
+depth 12
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL speculative_boundary_model.v
+chparam -set D 3 -set F 0 speculative_boundary_model
+prep -top speculative_boundary_model
+
+[files]
+../rtl/speculative_boundary_model.v

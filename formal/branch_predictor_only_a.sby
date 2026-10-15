@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 1
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL branch_predictor_only_a.v
+prep -top branch_predictor
+
+[files]
+/tmp/branch_predictor_only_a.v

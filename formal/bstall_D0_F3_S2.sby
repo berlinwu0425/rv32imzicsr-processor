@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 13
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL bounded_stall_model.v
+chparam -set D 0 -set F 3 -set S 2 bounded_stall_model
+prep -top bounded_stall_model
+
+[files]
+../rtl/bounded_stall_model.v

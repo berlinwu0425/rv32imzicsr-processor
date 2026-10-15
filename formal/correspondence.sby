@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 15
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL case_correspondence_formal.v
+prep -top case_correspondence_formal
+
+[files]
+../rtl/case_correspondence_formal.v

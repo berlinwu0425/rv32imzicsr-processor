@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL if_id_broken.v
+prep -top if_id_register
+
+[files]
+/tmp/if_id_broken.v

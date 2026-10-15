@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL caseA_broken.v
+prep -top caseA_formal
+
+[files]
+/tmp/caseA_broken.v

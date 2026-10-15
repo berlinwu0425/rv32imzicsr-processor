@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 7
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL speculative_equivalence_model.v
+chparam -set D 1 -set F 3 -set L_LAT 0 speculative_equivalence_model
+prep -top speculative_equivalence_model
+
+[files]
+../rtl/speculative_equivalence_model.v

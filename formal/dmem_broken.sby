@@ -1,0 +1,14 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL dmem_broken.v
+chparam -set MEM_BYTES 64 dmem
+prep -top dmem
+
+[files]
+/tmp/dmem_broken.v

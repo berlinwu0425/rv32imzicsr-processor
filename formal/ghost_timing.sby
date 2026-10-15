@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 10
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -DFORMAL ghost_timing_model.v
+prep -top ghost_timing_model
+
+[files]
+../rtl/ghost_timing_model.v
