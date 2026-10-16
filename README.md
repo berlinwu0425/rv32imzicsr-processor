@@ -6,7 +6,7 @@
 
 國立中興大學電機工程學系 專題研究 ｜ 電機四 伍柏霖 ｜ 指導老師：范志鵬 教授
 
-📄 完整專題報告：[docs/report.pdf](docs/report.pdf)
+📄 完整專題報告：[docs/report.pdf](docs/report.pdf)　｜　📝 [勘誤表](docs/ERRATA.md)（報告提交後發現的更正）
 
 ---
 
@@ -24,7 +24,7 @@
 | FPGA 實機 | EGO1（Xilinx Artix-7 XC7A35T）；獨立硬體自動檢查器 16/16、UART 外部觸發雙向互動、計時器中斷實機驗證、12 階段互動式展示系統 |
 | 向量處理器 | custom-0 opcode 自訂 9 條向量指令；平行版本 **約 2.84× speedup**（6,952 → 2,452 cycles），LUT +13.4%、DSP +140%；以 Amdahl 定律分析記憶體存取瓶頸 |
 | 動態分支預測器 | 2-bit 飽和計數器 + BTB（含 tag 比對）；基準測試執行時間 **降低 39.7%**（50,155 → 30,215 ns） |
-| 形式化安全邊界 | 三組參數化掃描共 780 組（99 + 297 + 384），支持 **F ≤ D + 1**、**F ≤ D + 1 + L_LAT**、**F ≤ D + 1 + S** 三個邊界關係；真實 baseline CPU（D = 0, F = 0）位於安全區內 |
+| 形式化安全邊界 | 三組參數化掃描共 792 組（99 + 297 + 396），支持 **F ≤ D + 1**、**F ≤ D + 1 + L_LAT**、**F ≤ D + 1 + S** 三個邊界關係；真實 baseline CPU（D = 0, F = 0）位於安全區內 |
 
 ## 處理器架構
 
@@ -55,12 +55,12 @@
 | 報告章節 | 模型 | 參數範圍 | 組數 | 邊界關係 |
 |---|---|---|---|---|
 | 4.6 基準情境 | `speculative_boundary_model.v` | D 0–8、F 0–10 | 99 | F ≤ D + 1 |
-| 4.7 納入協同處理器延遲 | `speculative_kill_model.v` | D 0–8、F 0–10、L_LAT ∈ {0, 2, 4} | 297 | F ≤ D + 1 + L_LAT |
-| 4.8 納入管線 stall | `bounded_stall_model.v` | D 0–8、F 0–10、S 0–3 | 384 | F ≤ D + 1 + S |
+| 4.7 納入協同處理器延遲 | `speculative_kill_model.v`（safety）<br>`speculative_equivalence_model.v`（safety + liveness） | D 0–8、F 0–10、L_LAT ∈ {0, 2, 4} | 各 297 | F ≤ D + 1 + L_LAT |
+| 4.8 納入管線 stall | `bounded_stall_model.v` | D 0–8、F 0–10、S 0–3 | 396 | F ≤ D + 1 + S |
 
 D：分支解決到協同處理器啟動點的管線推進距離；F：誤判偵測到 flush 生效的延遲；L_LAT：協同處理器運算完成/結果可見延遲；S：有效 stall cycle 數。
 
-三組掃描在邊界內全數 PASS，邊界外第一個參數點即產生形式化反例。協同處理器延遲與管線 stall 這兩個從未在同一模型中聯合驗證的因素，呈現完全相同的線性位移。
+掃描範圍內全部結果與邊界公式一致：邊界內 PASS，邊界外產生形式化反例。邊界值超過 F 掃描上限的格子，其 PASS／FAIL 交界點另以 F = 11–14 補驗（4.7 節兩個模型各 10 點、4.8 節 9 點），也全部一致。協同處理器延遲與管線 stall 這兩個從未在同一模型中聯合驗證的因素，呈現完全相同的線性位移。
 
 ### 限制
 
@@ -69,7 +69,7 @@ D：分支解決到協同處理器啟動點的管線推進距離；F：誤判偵
 - Theorem A1/A2 證明於改寫判斷式寫法的鏡像模型上，鏡像與原始 RTL 的忠實對應為人工建立、尚未形式化驗證的 assumption。
 - 僅涵蓋單一獨立推測事件；stall 對 D 的影響尚未在真實 RTL 上驗證。
 
-完整討論見報告第五章。
+完整討論見報告第五章；報告中已知的錯誤與更正見 [docs/ERRATA.md](docs/ERRATA.md)。
 
 ## 目錄結構
 
@@ -80,7 +80,7 @@ sim/        Verilator testbench（testbench.v、sim_main.cpp）
 riscof/     RISCOF DUT plugin（mycpu）與 Spike 參考模型 plugin
 formal/     SymbiYosys 設定檔（.sby）、參數掃描腳本與結果（.csv）
 fpga/       EGO1 頂層（ego1_top.v）、腳位約束（ego1.xdc）、測試與展示程式（programs/*.S）
-docs/       專題報告
+docs/       專題報告（report.pdf）與勘誤表（ERRATA.md）
 ```
 
 ## 執行方式
