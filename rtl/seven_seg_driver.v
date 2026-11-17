@@ -41,7 +41,7 @@ module seven_seg_driver (
         end
     endfunction
 
-    // 實測發現顯示順序整組左右鏡射，這裡把 nibble<->位置 的對應關係反過來修正
+    // EGO1 的顯示位置順序與 nibble 順序相反，這裡把 nibble<->位置 的對應關係反過來
     always @(*) begin
         case (scan_phase)
             2'b00: begin

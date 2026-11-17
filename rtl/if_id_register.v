@@ -1,7 +1,7 @@
 module if_id_register (
     input  wire        clk,
     input  wire        rst_n,
-    input  wire        stall,        // 1 = 凍結（load-use hazard 用，目前先接死0）
+    input  wire        stall,        // 1 = 凍結（load-use hazard 與向量指令執行期間）
     input  wire        flush,        // 1 = 清空成NOP（branch/jump redirect用）
 
     input  wire [31:0] pc_out_in,

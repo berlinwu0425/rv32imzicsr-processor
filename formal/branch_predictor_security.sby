@@ -3,7 +3,7 @@ mode bmc
 depth 1
 
 [engines]
-smtbmc z3
+smtbmc --unroll z3
 
 [script]
 read -formal -DFORMAL branch_predictor.v

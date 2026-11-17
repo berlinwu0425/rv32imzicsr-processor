@@ -1,15 +1,15 @@
 `timescale 1ns / 1ps
 
 // =========================================================================
-// 中斷優先權邏輯 —— 形式驗證專用抽出模組
-// 這裡的邏輯逐字複製自 cpu_top.v 裡真正的實作(第524~540行附近)，
-// 目的是把「中斷優先權判斷」這一小段組合邏輯獨立出來，單獨驗證，
-// 不需要把整個cpu_top.v(含管線/向量單元/分支預測器等大量無關邏輯)
-// 一起餵給形式驗證引擎。這個模組本身不會被實際合成/使用，純粹是
-// 驗證用的鏡像，維護時務必跟cpu_top.v裡的真正實作保持同步。
+// 中斷優先權邏輯 —— 形式驗證用的獨立模組
+// 內容與 cpu_top.v 中的中斷判斷與 trap 原因選擇相同，單獨抽出來驗證，
+// 不必把整個 cpu_top 交給形式化引擎。本模組不參與合成；
+// 修改 cpu_top.v 的對應邏輯時，必須同步更新這裡。
 // =========================================================================
 module interrupt_priority_formal (
     input  wire valid_ex,
+    input  wire vec_stall,        // 向量單元執行中
+    input  wire vec_killable,     // 執行中的向量指令還可以被取消
     input  wire mstatus_mie,      // mstatus_out[3]
     input  wire mie_msie,         // mie_out[3]
     input  wire mie_mtie,         // mie_out[7]
@@ -25,8 +25,9 @@ module interrupt_priority_formal (
     output reg  [31:0] trap_cause_ex
 );
 
-    wire msi_pending = valid_ex && mstatus_mie && mie_msie && msip_reg;
-    wire mti_pending = valid_ex && mstatus_mie && mie_mtie && mtip_ext;
+    wire irq_allowed = valid_ex && (!vec_stall || vec_killable);
+    wire msi_pending = irq_allowed && mstatus_mie && mie_msie && msip_reg;
+    wire mti_pending = irq_allowed && mstatus_mie && mie_mtie && mtip_ext;
     wire interrupt_pending = msi_pending || mti_pending;
 
     assign trap_taken_ex = interrupt_pending || is_ecall_ex_r || is_ebreak_ex_r || instr_misalign_ex || load_misalign_ex || store_misalign_ex;

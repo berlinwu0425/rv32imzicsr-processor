@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
+import os
+import shutil
 import sys
 import subprocess
+
+
+def toolchain_prefix():
+    """RISC-V binutils 前綴：可用環境變數 CROSS 指定，否則自動偵測"""
+    if os.environ.get('CROSS'):
+        return os.environ['CROSS']
+    for p in ('riscv32-unknown-elf-', 'riscv64-unknown-elf-'):
+        if shutil.which(p + 'objcopy'):
+            return p
+    return 'riscv64-unknown-elf-'
+
+
+CROSS = toolchain_prefix()
 
 def main():
     elf = sys.argv[1]
@@ -12,7 +27,7 @@ def main():
 
     # 1. 只抽取 .text.init 這個 section 成純二進位
     subprocess.run(
-        ["riscv64-unknown-elf-objcopy", "-O", "binary",
+        [CROSS + "objcopy", "-O", "binary",
          "--only-section=.text.init", elf, bin_file],
         check=True
     )
@@ -39,7 +54,7 @@ def main():
     base_addr = 0x80000000
 
     objdump_out = subprocess.run(
-        ["riscv64-unknown-elf-objdump", "-h", elf],
+        [CROSS + "objdump", "-h", elf],
         capture_output=True, text=True, check=True
     ).stdout
 
@@ -52,7 +67,7 @@ def main():
 
     if data_vma is not None:
         dcopy = subprocess.run(
-            ["riscv64-unknown-elf-objcopy", "-O", "binary",
+            [CROSS + "objcopy", "-O", "binary",
              "--only-section=.data", elf, data_bin_file],
             capture_output=True
         )
@@ -62,7 +77,7 @@ def main():
             except FileNotFoundError:
                 ddata = b""
             if len(ddata) > 0:
-                # dmem.v 現在改成以 word(32-bit) 為單位的陣列，
+                # dmem.v 以 word(32-bit) 為單位，
                 # @位址前綴要用 word index，且每行資料要是完整32-bit(小端序打包)，
                 # 跟前面 .text.hex 的打包方式保持一致
                 data_offset = data_vma - base_addr
@@ -85,7 +100,7 @@ def main():
 
     # 3. 從 elf 的 symbol table 抓 begin_signature / end_signature 位址
     out = subprocess.run(
-        ["riscv64-unknown-elf-objdump", "-t", elf],
+        [CROSS + "objdump", "-t", elf],
         capture_output=True, text=True, check=True
     ).stdout
 

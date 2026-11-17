@@ -1,7 +1,7 @@
 module imem #(
     parameter MEM_WORDS = 1048576,   // 預設維持模擬用大小，不影響既有RISCOF驗證流程
     parameter INIT_FILE = ""          // 空字串=不做內部初始化(模擬時仍靠testbench外部$readmemh載入)
-                                       // FPGA合成時指定實際.hex檔路徑，讓Vivado把內容當BRAM初始值
+                                       // FPGA合成時指定實際.hex檔路徑，作為記憶體初始內容
 )(
     input  [31:0] iaddr,
     output [31:0] inst

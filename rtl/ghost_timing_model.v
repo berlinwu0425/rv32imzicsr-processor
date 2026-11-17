@@ -65,12 +65,10 @@ module ghost_timing_model (
         end
     end
 
-    // ---- 明確定義的研究範圍：Stall-free Timing ----
-    // 這不是"偷偷簡化掉stall"，而是正式界定這一版定理的適用範圍：
-    //   Theorem (Stall-free D)：在pipeline不被stall阻塞的條件下，
-    //   這顆baseline CPU的具體推測距離 D = 0。
-    // Stall如何影響D(即D_eff = f(D0, stall history))，明確列為
-    // 獨立的後續研究(Layer B / Future Extension)，不在這一版定理範圍內。
+    // ---- 適用範圍：stall-free ----
+    // 本模型證明在管線沒有 stall 的條件下，推測距離 D = 0。
+    // stall 的影響由 cpu_top.v 的性質 S7 處理：會取消指令的事件發生時，
+    // ID/EX 不會處於 stall，因此實際的 S = 0。
     always @(*) begin
         assume (!stall);
     end

@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 // =========================================================================
-// Contribution 3 (完整版)：架構等價性
+// 報告 4.7 節：kill/commit 的 safety 與 liveness
 // 加入 mispredicted 這個自由變數(SymbiYosys會窮舉true/false兩種情況)，
 // 分別驗證：
 //   Safety(對應wrong-path)：誤判時，結果絕對不能提交(不能"復活")
@@ -93,7 +93,7 @@ module speculative_equivalence_model #(
 
     // Liveness(bounded)：沒誤判的instruction，走到commit_point"下一拍"，必須已提交
     // (commit_point那一拍才剛觸發非同步賦值，committed_sticky_r要等下一拍才反映新值，
-    //  這裡用跟Contribution 1相同手法：手動維護影子暫存器記錄"上一拍是否為commit_point")
+    //  因此手動維護影子暫存器記錄"上一拍是否為commit_point")
     reg commit_point_prev;
     reg mispredicted_prev;
     initial commit_point_prev = 1'b0;

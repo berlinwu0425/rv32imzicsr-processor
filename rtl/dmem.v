@@ -19,7 +19,7 @@ module dmem #(
     localparam WORD_ADDR_BITS = $clog2(WORDS);
 
     // ==========================================
-    // 0. 宣告記憶體本體：改成以 word(32-bit) 為單位，方便Vivado推斷成Block RAM
+    // 0. 記憶體本體：以 word(32-bit) 為單位；讀取為組合邏輯，FPGA 上合成為 distributed RAM
     // ==========================================
     reg [31:0] memory [0:WORDS-1];
 

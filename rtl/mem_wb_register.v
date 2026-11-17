@@ -22,7 +22,21 @@ module mem_wb_register (
     output reg  [2:0]   MemtoReg_o
 );
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n || flush) begin
+        // 非同步reset與同步flush分成兩個分支：
+        // 兩者寫在同一個條件(!rst_n || flush)時，模擬行為雖然相同，
+        // 但合成/形式化工具無法確定flush該當成同步還是非同步清除
+        if (!rst_n) begin
+            alu_result_o    <= 32'b0;
+            mem_rdata_o     <= 32'b0;
+            imm_u_o         <= 32'b0;
+            pc_plus4_o      <= 32'b0;
+            csr_rdata_o     <= 32'b0;
+            vl_result_o     <= 32'b0;
+            rd_o            <= 5'b0;
+            reg_write_en_o  <= 1'b0;   // 確保bubble不會寫回暫存器
+            MemtoReg_o      <= 3'b0;
+        end
+        else if (flush) begin   // 同步清除成bubble，優先權高於stall與一般更新
             alu_result_o    <= 32'b0;
             mem_rdata_o     <= 32'b0;
             imm_u_o         <= 32'b0;

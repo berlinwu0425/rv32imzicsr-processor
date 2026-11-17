@@ -1,0 +1,47 @@
+[options]
+mode prove
+depth 12
+
+[engines]
+smtbmc --unroll z3
+
+[script]
+read -formal -DFORMAL alu.v alu_control.v auto_checker.v branch_predictor.v branch_unit.v button_debounce.v control.v cpu_top.v csr_file.v decoder.v dmem.v ex_mem_register.v forwarding_unit.v hazard_detect_unit.v id_ex_register.v if_id_register.v imem.v imm_gen.v mem_wb_register.v mtime_unit.v mul_div_unit.v npc.v pc.v regfile.v vector_unit.v writeback_mux.v
+chparam -set IMEM_WORDS 64 -set DMEM_BYTES 256 cpu_top
+prep -top cpu_top
+# 抽象化(cutpoint)：把跟待證性質無關的區塊輸出換成自由變數，縮小求解規模。
+# 保留的是真實的控制邏輯、五級管線暫存器、CSR、向量單元狀態機；
+# 被抽象的區塊可以輸出任意值，所以證明出來的性質對真實設計只會更強(sound)：
+#   指令記憶體 -> 任意指令串流；暫存器堆/資料記憶體/乘除法器/向量運算結果 -> 任意資料；
+#   分支預測器 -> 任意預測結果；計時器/按鍵/檢查器 -> 任意時間點的中斷與輸入
+cutpoint cpu_top/c:u_imem cpu_top/c:u_dmem cpu_top/c:u_regfile cpu_top/c:u_mul_div_unit
+cutpoint cpu_top/c:u_branch_predictor cpu_top/c:u_mtime_unit cpu_top/c:u_auto_checker cpu_top/c:u_btn_s0_debounce
+cutpoint vector_unit/w:par_result*
+
+[files]
+../rtl/alu.v
+../rtl/alu_control.v
+../rtl/auto_checker.v
+../rtl/branch_predictor.v
+../rtl/branch_unit.v
+../rtl/button_debounce.v
+../rtl/control.v
+../rtl/cpu_top.v
+../rtl/csr_file.v
+../rtl/decoder.v
+../rtl/dmem.v
+../rtl/ex_mem_register.v
+../rtl/forwarding_unit.v
+../rtl/hazard_detect_unit.v
+../rtl/id_ex_register.v
+../rtl/if_id_register.v
+../rtl/imem.v
+../rtl/imm_gen.v
+../rtl/mem_wb_register.v
+../rtl/mtime_unit.v
+../rtl/mul_div_unit.v
+../rtl/npc.v
+../rtl/pc.v
+../rtl/regfile.v
+../rtl/vector_unit.v
+../rtl/writeback_mux.v

@@ -39,10 +39,8 @@ module branch_predictor #(
     // ---- 查詢：組合邏輯，同一拍立即回應；tag要對得上才算真的命中，否則視同沒有預測資訊 ----
     wire tag_hit = btb_valid[query_idx] && (btb_tag[query_idx] == query_tag);
     assign predict_taken  = tag_hit && counter_table[query_idx][1];
-    // 安全加固：predict_target 現在也用 tag_hit 保護，
-    // tag miss 時恆定輸出0，不再原封不動洩漏被別名碰撞覆蓋的項目內容
-    // (雖然目前唯一的消費端cpu_top.v已經有用predict_taken做保護，
-    // 但這種"依賴使用端自律"的設計不是縱深防禦，源頭直接把關才是正確做法)
+    // predict_target 也用 tag_hit 保護：tag miss 時恆定輸出 0，
+    // 不洩漏被別名碰撞覆蓋的項目內容 (在源頭把關，不依賴使用端檢查 predict_taken)
     assign predict_target = tag_hit ? btb_table[query_idx] : 32'b0;
 
     // ---- 更新：同步邏輯，依實際結果調整計數器、寫入BTB+tag ----
@@ -52,8 +50,8 @@ module branch_predictor #(
             for (i = 0; i < TABLE_SIZE; i = i + 1) begin
                 counter_table[i] <= 2'b01;   // reset預設弱不跳，保守起點
                 btb_valid[i]     <= 1'b0;
-                btb_tag[i]       <= {TAG_BITS{1'b0}};   // 修正：之前漏掉，導致reset後為不確定值
-                btb_table[i]     <= 32'b0;              // 修正：同樣遺漏，一併補齊
+                btb_tag[i]       <= {TAG_BITS{1'b0}};
+                btb_table[i]     <= 32'b0;
             end
         end else if (update_en) begin
             // 只有tag也對得上時，才做飽和計數器的漸進調整；
@@ -91,10 +89,8 @@ module branch_predictor #(
         end
     end
 
-    // ---- 安全性質B(預期目前會FAIL，正式記錄這是一個已知的設計缺口)：
-    // tag miss時，predict_target也應該要恆為0(或某個跟被覆蓋內容無關的固定值)，
-    // 目前的實作並未如此，這條斷言故意寫成「規格上應該要有的樣子」，
-    // 用來對照出目前實作跟這個更嚴謹規格之間的落差
+    // ---- 安全性質B：tag miss時，predict_target也必須恆為0，
+    // 不洩漏被別名碰撞覆蓋的項目內容。
     always @(*) begin
         if (!tag_hit) begin
             assert (predict_target == 32'b0);

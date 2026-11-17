@@ -57,7 +57,9 @@ module csr_file(
     // 讀取：組合邏輯，依位址選出對應暫存器
     always @(*) begin
         case (csr_addr)
-            ADDR_MSTATUS:  csr_rdata = mstatus;
+            // MPP(bit12:11)固定讀回11：本處理器只實作M-mode，
+            // 依特權規格MPP為WARL欄位，唯一合法值就是11(Machine)
+            ADDR_MSTATUS:  csr_rdata = {mstatus[31:13], 2'b11, mstatus[10:0]};
             ADDR_MIE:      csr_rdata = mie;
             ADDR_MTVEC:    csr_rdata = mtvec;
             ADDR_MSCRATCH: csr_rdata = mscratch;

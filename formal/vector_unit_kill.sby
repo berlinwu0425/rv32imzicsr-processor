@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 10
+
+[engines]
+smtbmc --unroll z3
+
+[script]
+read -formal -DFORMAL_VECTOR_UNIT vector_unit.v
+prep -top vector_unit
+# 運算結果抽象成任意值：要證明的是「kill後狀態不變」，跟算出什麼無關
+cutpoint vector_unit/w:par_result*
+
+[files]
+../rtl/vector_unit.v

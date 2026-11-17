@@ -17,7 +17,7 @@ logger = logging.getLogger()
 
 class mycpu(pluginTemplate):
     __model__ = "mycpu"
-    __version__ = "XXX"
+    __version__ = "1.0"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -28,11 +28,14 @@ class mycpu(pluginTemplate):
             print("Please enter input file paths in configuration.")
             raise SystemExit(1)
 
-        self.dut_exe = "/home/berlinwu/RV32I_CPU/obj_dir/Vcpu_tb"
+        # 相對路徑以 config.ini 所在的目錄為基準
+        config_dir = kwargs.get('config_dir', os.getcwd())
+        # 模擬器執行檔：預設為 repo 根目錄的 obj_dir/Vcpu_tb (見 README 的模擬指令)
+        self.dut_exe = utils.absolute_path(config_dir, config.get('dut_exe', '../obj_dir/Vcpu_tb'))
         self.num_jobs = str(config['jobs'] if 'jobs' in config else 1)
-        self.pluginpath = os.path.abspath(config['pluginpath'])
-        self.isa_spec = os.path.abspath(config['ispec'])
-        self.platform_spec = os.path.abspath(config['pspec'])
+        self.pluginpath = utils.absolute_path(config_dir, config['pluginpath'])
+        self.isa_spec = utils.absolute_path(config_dir, config['ispec'])
+        self.platform_spec = utils.absolute_path(config_dir, config['pspec'])
 
         if 'target_run' in config and config['target_run'] == '0':
             self.target_run = False

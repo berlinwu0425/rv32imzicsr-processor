@@ -9,7 +9,7 @@ module auto_checker (
     input  wire        clk,
     input  wire         rst_n,
     input  wire         done,          // CPU完成訊號(來自0x07000000)
-    output reg  [31:0] chk_addr,       // 要讀取的BRAM位址(接到dmem第二埠)
+    output reg  [31:0] chk_addr,       // 要讀取的資料記憶體位址(接到dmem的檢查專用讀取埠)
     input  wire [31:0] chk_rdata,      // 從dmem讀回的資料
     output reg  [7:0]  pass_led        // bit7=全部通過總燈號, bit[4:0]=通過項目數量(0~16)
 );

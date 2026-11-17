@@ -35,23 +35,26 @@ module cpu_top #(
     wire        is_done_addr_mem;
     wire        btn_s0_pulse;   // S0防彈跳後的乾淨脈衝，需提前宣告
     wire        mtip_ext;   // 計時器中斷pending，來自mtime_unit的硬體比較器，需提前宣告
-    wire        vec_stall;   // 向量單元忙碌訊號，需要提前宣告餵給 hazard_stall (跟trap_taken_ex同樣道理)
+    wire        vec_stall;   // 向量單元忙碌訊號(state != IDLE)，需要提前宣告
+    wire        vec_hold;    // 向量指令這一拍必須留在EX級，需要提前宣告餵給 stall_all
+    wire        vec_killable;   // 執行中的向量指令還可以被取消(尚未commit)
+    wire        interrupt_pending;   // EX級這一拍要進中斷，需要提前宣告餵給 vec_start
     wire        is_vsetvl_ex, is_vec_op_ex;  // id_ex_register輸出，vector_unit具現化會用到
     wire        predict_taken_if;   // IF階段查詢分支預測器的結果，需提前宣告餵給 next_pc mux
     wire [31:0] predict_target_if;
 
     // =========================================================================
-    // 0. Hazard Detection Unit 已接上，負責處理 load-use hazard
-    //    Forwarding Unit 尚未接，一般 data hazard 目前還是靠 stall 硬撐
+    // 0. 管線凍結控制
+    //    hazard_stall：load-use hazard，凍結PC與IF/ID，並往ID/EX塞一個bubble
+    //    vec_hold    ：向量指令在EX級執行多個cycle，凍結PC、IF/ID、ID/EX
+    //                  (向量指令自己留在EX)，並往EX/MEM塞bubble
+    //    一般的data hazard由forwarding_unit處理，不需要stall
     // =========================================================================
     wire hazard_stall;   // 來自 hazard_detect_unit，1 = 偵測到 load-use hazard
-    // stall_all：把向量單元忙碌訊號也納入凍結判斷，跟load-use hazard共用同一套凍結機制
-    wire stall_all = hazard_stall || vec_stall;
+    wire stall_all = hazard_stall || vec_hold;
 
     wire if_id_stall        = stall_all;
-    wire id_ex_hazard_flush = hazard_stall;  // 只給load-use hazard用，向量單元忙碌改用stall(見下方)不是flush
-    // 註：PC 的凍結不透過額外的 enable port，而是直接在 next_pc 的 mux 裡處理
-    //     （見下方 IF 階段的 assign next_pc = ...），這樣就不用修改 pc 模組介面
+    wire id_ex_hazard_flush = hazard_stall;  // 只給load-use hazard用
 
     // =========================================================================
     // [Instruction Fetch (IF) 階段]
@@ -81,8 +84,8 @@ module cpu_top #(
         .update_target   (next_pc_ex)
     );
 
-    // 優先權：trap進入/mret > redirect_ex(EX階段驗證後確定要跳轉，含猜錯復原) >
-    //         predict_taken(IF階段預測猜跳，還沒驗證) > hazard_stall凍結 > 正常PC+4
+    // 優先權：trap 進入 > mret > redirect_ex(EX 階段確定的跳轉，含分支誤判的復原) >
+    //         stall(PC 保持不變) > predict_taken(IF 階段預測 taken) > PC+4
     assign next_pc   = trap_taken_ex ? mtvec_out :
                         is_mret_ex_r ? mepc_out :
                         redirect_ex ? next_pc_ex :
@@ -90,7 +93,10 @@ module cpu_top #(
                         stall_all ? pc_out :
                                     pc_seq_if;
 
-    wire pc_write_en = ~stall_all;
+    // 控制流程改變(trap進入/mret/redirect)的優先權高於stall：
+    // 例如中斷剛好在load-use stall那一拍成立，IF/ID、ID/EX都會被flush，
+    // PC也必須同時跳到mtvec；若PC被stall凍住，這次trap就會遺失。
+    wire pc_write_en = ~stall_all || trap_taken_ex || is_mret_ex_r || redirect_ex;
 
     pc u_pc (
         .clk         (clk),
@@ -98,7 +104,6 @@ module cpu_top #(
         .next_pc     (next_pc),
         .pc_out      (pc_out),
         .pc_write_en (pc_write_en)
-        // TODO: pc_write_en 之後要接進 pc 模組做 clock enable (目前 pc 模組還沒有這個埠位)
     );
 
     imem #(
@@ -263,8 +268,9 @@ module cpu_top #(
 
     id_ex_register u_id_ex_register (
         .clk (clk), .rst_n (rst_n),
-        .flush (redirect_ex || id_ex_hazard_flush || trap_taken_ex),
-        .stall (vec_stall),  // 向量單元忙碌期間，EX階段保持原地不動(不清空)
+        // mret也要flush：mret後面那條(已在ID級)是錯誤路徑上的指令，不能進EX
+        .flush (redirect_ex || id_ex_hazard_flush || trap_taken_ex || is_mret_ex_r),
+        .stall (vec_hold),  // 向量指令執行期間，它自己留在EX級不動
         .pc_out_in(pc_out_id),
         .rdata1_in(rdata1_id), .rdata2_in(rdata2_id),
         .imm_in(imm_id), .imm_b_in(imm_b_id), .imm_j_in(imm_j_id), .imm_u_in(imm_u_id),
@@ -353,7 +359,7 @@ module cpu_top #(
                             (forward_b == 2'b10) ? wb_data :
                                                     rdata2_ex;
 
-    // 這兩個mux的輸入現在改用轉發後的值，不再直接吃ID/EX的原始rdata1_ex/rdata2_ex
+    // ALU 的兩個運算元都使用轉發後的值
     assign alu_a_in = (ALUSrcA_ex == 1'b1) ? pc_out_ex : fwd_rs1_ex;
     assign alu_b_in = (ALUSrc_ex == 1'b1) ? (ALUAUIPC_ex == 1'b1 ? imm_u_ex : imm_ex) : fwd_rs2_ex;
 
@@ -411,9 +417,19 @@ module cpu_top #(
     wire        vec_mem_read_en, vec_mem_write_en;
     wire [31:0] vec_mem_rdata;
 
+    // !interrupt_pending：向量指令在EX級的同一拍若被中斷取消(之後會從mepc重新執行)，
+    // 就不能啟動向量單元，否則這條指令的副作用會發生兩次。
+    // (向量指令本身不會產生同步例外，能在EX級取消它的trap只有中斷)
     wire vec_start = (is_vld_ex || is_vst_ex || is_vadd_ex || is_vmul_ex ||
                        is_vsub_ex || is_vand_ex || is_vor_ex || is_vxor_ex || is_vaddx_ex)
-                      && valid_ex && !vec_stall;
+                      && valid_ex && !vec_stall && !interrupt_pending;
+
+    // vsetvl 也是會改變向量單元狀態(vl)的指令，同樣不能在被中斷取消的那一拍生效
+    wire vsetvl_en = is_vsetvl_ex && valid_ex && !interrupt_pending;
+
+    // kill：向量指令執行到一半被中斷取消。它會從mepc重新執行，
+    // 所以向量單元必須丟棄尚未commit的結果(對應CV-X-IF的commit_kill)。
+    wire vec_kill = vec_stall && interrupt_pending;
 
     vector_unit u_vector_unit (
         .clk              (clk),
@@ -433,10 +449,13 @@ module cpu_top #(
         .vs1_idx          (rs1_ex[2:0]),
         .vs2_idx          (rs2_ex[2:0]),
         .base_addr        (fwd_rs1_ex),
-        .vsetvl_en        (is_vsetvl_ex && valid_ex),
+        .vsetvl_en        (vsetvl_en),
         .vsetvl_rs1_val   (fwd_rs1_ex),
         .vl_out           (vl_result_ex),
         .vec_stall        (vec_stall),
+        .vec_hold         (vec_hold),
+        .kill             (vec_kill),
+        .vec_killable     (vec_killable),
         .vec_active       (vec_active),
         .vec_daddr        (vec_daddr),
         .vec_wdata        (vec_wdata),
@@ -480,8 +499,7 @@ module cpu_top #(
     assign redirect_ex = branch_mispredict_ex | jump_en_ex | jalr_en_ex;
 
     // 猜錯時的正確去向：如果實際上沒跳，正確位址是pc+4；如果實際上跳了(但目標猜錯)，正確位址是next_pc_ex
-    // 這個訊號會取代原本redirect_ex成立時next_pc_ex的角色，所以直接讓next_pc_ex在"沒跳"的情況下等於pc_plus4_ex
-    // (透過修改npc.v的next_pc輸出邏輯本身處理，這裡不用額外訊號)
+    // 這由 npc.v 處理：實際沒跳時 next_pc_ex 就等於 pc+4，不需要額外訊號
 
     // 分支預測器更新介面：只有條件分支才需要更新預測器內容(jump/jalr不用，因為沒有對應的預測)
     wire bp_update_en_ex = branch_en_ex && valid_ex;
@@ -526,10 +544,15 @@ module cpu_top #(
     wire valid_ex = (pc_out_ex != 32'b0);
     // 軟體中斷跟計時器中斷各自獨立的致能位元 (MSIE=bit3, MTIE=bit7)，
     // 全域中斷開關(mstatus.MIE)兩者共用
-    wire msi_pending = valid_ex && mstatus_out[3] && mie_out[3] && msip_reg;
-    wire mti_pending = valid_ex && mstatus_out[3] && mie_out[7] && mtip_ext;
+    // 向量單元執行中：
+    //   還沒commit(vec_killable) -> 可以接受中斷，同時kill掉這條向量指令，之後重新執行
+    //   已經開始寫記憶體的vst    -> 不能取消，中斷延後到它完成
+    // 啟動當拍(vec_stall還是0)被中斷：vec_start會被interrupt_pending擋下，根本不啟動。
+    wire irq_allowed = valid_ex && (!vec_stall || vec_killable);
+    wire msi_pending = irq_allowed && mstatus_out[3] && mie_out[3] && msip_reg;
+    wire mti_pending = irq_allowed && mstatus_out[3] && mie_out[7] && mtip_ext;
     // RISC-V規格規定的中斷優先權：軟體中斷 > 計時器中斷 (我們沒有外部中斷)
-    wire interrupt_pending = msi_pending || mti_pending;
+    assign interrupt_pending = msi_pending || mti_pending;
 
     // ---- 統整 trap 來源與優先權 (由高到低: 中斷 > 指令未對齊 > ecall/ebreak > load/store未對齊) ----
     // 中斷優先權最高是 RISC-V 規格要求：同一指令若中斷跟例外同時成立，中斷優先
@@ -610,7 +633,10 @@ module cpu_top #(
     wire [31:0] vl_result_mem;
     ex_mem_register u_ex_mem_register (
         .clk(clk), .rst_n(rst_n),
-        .flush(trap_taken_ex || is_mret_ex_r),  // trap/mret 成立時，觸發指令本身也不能繼續寫回
+        // trap/mret 成立時，觸發指令本身也不能繼續寫回；
+        // vec_hold 期間向量指令還留在EX級，MEM級補bubble，讓它只在最後一拍進MEM一次
+        // (向量指令在MEM/WB本來就沒有動作，這裡補bubble是為了波形與行為的一致性)
+        .flush(trap_taken_ex || is_mret_ex_r || vec_hold),
         .alu_result_in(alu_result_final), .rdata2_in(fwd_rs2_ex),
         .imm_u_in(imm_u_ex), .pc_plus4_in(pc_plus4_ex), .csr_rdata_in(csr_rdata_ex),
         .vl_result_in(vl_result_ex),
@@ -741,7 +767,7 @@ module cpu_top #(
 
     // vec_active=1 時，dmem 的存取權交給 vector_unit(vld/vst 借用)；
     // vec_active=0 時，維持主管線原本的存取行為，兩者互斥、不會同時發生
-    // (因為 vec_active 拉高時主管線已經被 stall_all 凍結，MEM 階段不會有新指令在動 dmem)
+    // (vec_active 拉高時向量指令留在EX級，EX/MEM收到的是bubble，MEM階段不會有指令在動 dmem)
     wire [31:0] dmem_daddr_final     = vec_active ? vec_daddr : alu_result_mem;
     wire [31:0] dmem_wdata_final     = vec_active ? vec_wdata : rdata2_mem;
     wire        dmem_mem_read_final  = vec_active ? vec_mem_read_en  : (mem_read_en_mem && !is_msip_addr_mem && !is_led_addr_mem && !is_result_addr_mem && !is_done_addr_mem && !is_uart_rx_addr_mem && !is_uart_tx_addr_mem && !is_uart_busy_addr_mem && !is_mtime_any_addr_mem && !is_btn_addr_mem && !is_switch_addr_mem);
@@ -775,7 +801,7 @@ module cpu_top #(
         end
     end
 
-    // ---- 獨立硬體自動驗證檢查器：偵測done_flag，自動讀BRAM比對golden值 ----
+    // ---- 獨立硬體自動驗證檢查器：偵測done_flag，自動讀資料記憶體比對golden值 ----
     auto_checker u_auto_checker (
         .clk       (clk),
         .rst_n     (rst_n),
@@ -844,5 +870,105 @@ module cpu_top #(
         .MemtoReg    (MemtoReg_wb),
         .wb_data     (wb_data)
     );
+
+`ifdef FORMAL
+    // =========================================================================
+    // 系統層級形式化性質 (formal/cpu_top_safety.sby)。
+    // 指令記憶體內容不設限，等同於對「任意程式」成立。
+    //
+    // 涵蓋三種會取消指令的事件：分支誤判/跳躍(redirect)、trap進入、mret。
+    //   S1  事件發生的下一拍，ID/EX 是 bubble，向量單元不會被啟動
+    //   S2  同一拍被 trap 取消的指令，不會啟動向量單元、不會改 vl
+    //   S3  向量單元執行中不會重複啟動，只有尚未 commit 時的中斷能取消它
+    //   S4  向量指令留在 EX 期間：ID/EX 內容不變、EX/MEM 收到 bubble
+    //   S5  控制流程改變一定會反映到 PC (不會因為 stall 而遺失)
+    //   S6  被 trap/mret 取消的指令不會進到 MEM 級
+    //   S7  會取消指令的事件發生時，ID/EX 不在 stall
+    // =========================================================================
+    reg f_past_valid;
+    initial f_past_valid = 1'b0;
+    always @(posedge clk) f_past_valid <= 1'b1;
+
+    // 驗證一開始必須先經過一次reset
+    always @(*) begin
+        if (!f_past_valid) assume (!rst_n);
+    end
+
+    wire f_ctrl_change = redirect_ex || trap_taken_ex || is_mret_ex_r;
+
+    // ---- 輔助不變量 (讓k-induction排除不可達的狀態) ----
+    always @(*) begin
+        if (rst_n) begin
+            // I1：ID/EX 的內容一定是合法的解碼結果，
+            //     向量指令不會同時帶有分支/存取記憶體/系統指令的控制訊號
+            if (is_vec_op_ex || is_vsetvl_ex) begin
+                assert (!is_ecall_ex_r && !is_ebreak_ex_r && !is_mret_ex_r && !is_csr_ex);
+                assert (!mem_read_en_ex && !mem_write_en_ex);
+                assert (!branch_en_ex && !jump_en_ex && !jalr_en_ex);
+            end
+            assert (!(is_vec_op_ex && is_vsetvl_ex));
+            // I2：向量單元執行中，EX 級一定是啟動它的那條向量指令
+            if (vec_stall) assert (is_vec_op_ex && valid_ex);
+        end
+    end
+
+    // ---- S2 / S3：組合性質 ----
+    always @(*) begin
+        if (rst_n) begin
+            // S2：被 trap 取消的指令，同一拍不能啟動向量單元、不能改 vl
+            assert (!(vec_start && trap_taken_ex));
+            assert (!(vsetvl_en && trap_taken_ex));
+            // S3：向量單元執行中不會重複啟動；唯一能取消 EX 級那條指令的事件是
+            //     「還沒commit時的中斷」，而且一定伴隨kill。已經不可kill的指令不會被取消。
+            if (vec_stall) begin
+                assert (!vec_start);
+                assert (!redirect_ex && !is_mret_ex_r);
+                assert (trap_taken_ex == vec_kill);
+                if (!vec_killable) assert (!f_ctrl_change && !vec_kill);
+            end
+            if (!vec_stall) assert (!vec_kill);
+            // S7：會取消指令的事件發生時，ID/EX 一定不在 stall (實際的 S = 0)。
+            //     也就是真實 RTL 上不存在「stall 讓被取消的指令停在半路」的情況，
+            //     S1 的結論不需要 stall-free 的前提。
+            assert (!(f_ctrl_change && vec_hold) || vec_kill);
+        end
+    end
+
+    // ---- S1 / S4 / S5 / S6：跨拍性質 ----
+    always @(posedge clk) begin
+        if (f_past_valid && rst_n && $past(rst_n)) begin
+            // S1：控制流程改變的下一拍，ID/EX 是 bubble
+            if ($past(f_ctrl_change)) begin
+                assert (pc_out_ex == 32'b0);
+                assert (!is_vec_op_ex && !is_vsetvl_ex);
+                assert (!vec_start && !vsetvl_en);
+                assert (!reg_write_en_ex && !mem_read_en_ex && !mem_write_en_ex);
+                assert (!branch_en_ex && !jump_en_ex && !jalr_en_ex);
+                assert (!is_ecall_ex_r && !is_ebreak_ex_r && !is_mret_ex_r && !is_csr_ex);
+            end
+
+            // S4：向量指令留在 EX 的期間
+            if ($past(vec_hold) && !$past(vec_kill)) begin
+                assert (pc_out_ex == $past(pc_out_ex));
+                assert (is_vec_op_ex);
+                assert (!reg_write_en_mem && !mem_read_en_mem && !mem_write_en_mem);
+            end
+
+            // S5：控制流程改變一定反映到 PC (優先權：trap > mret > redirect)
+            if ($past(trap_taken_ex))
+                assert (pc_out == $past(mtvec_out));
+            else if ($past(is_mret_ex_r))
+                assert (pc_out == $past(mepc_out));
+            else if ($past(redirect_ex))
+                assert (pc_out == $past(next_pc_ex));
+
+            // S6：被 trap/mret 取消的指令不會進到 MEM 級；trap 會記錄被取消指令的 PC
+            if ($past(trap_taken_ex) || $past(is_mret_ex_r))
+                assert (!reg_write_en_mem && !mem_read_en_mem && !mem_write_en_mem);
+            if ($past(trap_taken_ex))
+                assert (mepc_out == $past(pc_out_ex));
+        end
+    end
+`endif
 
 endmodule

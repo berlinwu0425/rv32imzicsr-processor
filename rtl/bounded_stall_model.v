@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 // =========================================================================
-// Bounded-Stall Extension (修正版)：把"指令物理移動"跟"flush訊號生效進度"
+// 報告 4.8 節 Bounded-Stall 模型：把"指令物理移動"跟"flush訊號生效進度"
 // 拆成兩個獨立的計數器，不再共用同一個age，避免兩者被stall一起延遲、
 // 彼此抵銷，製造出"stall沒有影響"的假象。
 //
@@ -73,8 +73,8 @@ module bounded_stall_model #(
         if (f_initial_state) begin
             assume (!rst_n);
         end
-        // 改成恰好S拍而不是最多S拍，因為最多S拍永遠包含stall_duration=0
-        // 這個最壞情況，導致S再怎麼變化，邊界結構上都不可能改變
+        // 恰好 S 拍而不是最多 S 拍：最多 S 拍永遠包含 stall_duration = 0
+        // 這個最壞情況，邊界就不會隨 S 改變
         assume (stall_duration == S);
     end
 

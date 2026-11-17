@@ -78,7 +78,46 @@ module id_ex_register (
 );
 
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n || flush) begin
+        // 非同步reset與同步flush分成兩個分支：
+        // 兩者寫在同一個條件(!rst_n || flush)時，模擬行為雖然相同，
+        // 但合成/形式化工具無法確定flush該當成同步還是非同步清除
+        if (!rst_n) begin
+            pc_out_o        <= 32'b0;
+            rdata1_o        <= 32'b0;
+            rdata2_o        <= 32'b0;
+            imm_o           <= 32'b0;
+            imm_b_o         <= 32'b0;
+            imm_j_o         <= 32'b0;
+            imm_u_o         <= 32'b0;
+            rd_o            <= 5'b0;
+            rs1_o           <= 5'b0;
+            rs2_o           <= 5'b0;
+            funct3_o        <= 3'b0;
+            funct7_o        <= 7'b0;
+            csr_addr_o      <= 12'b0;
+
+            branch_en_o     <= 1'b0;   // 確保bubble不會誤判branch
+            jump_en_o       <= 1'b0;   // 確保bubble不會誤跳轉
+            jalr_en_o       <= 1'b0;
+            mem_read_en_o   <= 1'b0;   // 確保bubble不會讀DMEM
+            mem_write_en_o  <= 1'b0;   // 確保bubble不會寫DMEM
+            reg_write_en_o  <= 1'b0;   // 確保bubble不會寫回暫存器
+            ALUSrc_o        <= 1'b0;
+            ALUSrcA_o       <= 1'b0;
+            ALUAUIPC_o      <= 1'b0;
+            ALUOp_o         <= 2'b0;
+            MemtoReg_o      <= 3'b0;
+            is_ecall_o      <= 1'b0;   // 確保bubble不會誤觸發trap
+            is_ebreak_o     <= 1'b0;
+            is_mret_o       <= 1'b0;
+            is_csr_o        <= 1'b0;
+            csr_imm_o       <= 1'b0;
+            is_vsetvl_o     <= 1'b0;   // 確保bubble不會誤觸發向量單元
+            is_vec_op_o     <= 1'b0;
+            predicted_taken_o  <= 1'b0;   // bubble/flush時不能誤判成有預測跳
+            predicted_target_o <= 32'b0;
+        end
+        else if (flush) begin   // 同步清除成bubble，優先權高於stall與一般更新
             pc_out_o        <= 32'b0;
             rdata1_o        <= 32'b0;
             rdata2_o        <= 32'b0;
@@ -187,4 +226,38 @@ module id_ex_register (
             predicted_target_o <= predicted_target_in;
         end
     end
+
+`ifdef FORMAL
+    // =========================================================================
+    // Theorem A1 (Flush Completeness)，formal/theorem_A1.sby
+    //   flush 的下一拍，不論 stall 與輸入為何，輸出一定是 bubble。
+    //   這同時也證明了「同一個時脈邊緣上 flush 優先於 stall 與一般更新」。
+    // =========================================================================
+    reg f_past_valid;
+    initial f_past_valid = 1'b0;
+    always @(posedge clk) f_past_valid <= 1'b1;
+
+    always @(*) begin
+        if (!f_past_valid) assume (!rst_n);
+    end
+
+    always @(posedge clk) begin
+        if (f_past_valid && rst_n && $past(rst_n)) begin
+            if ($past(flush)) begin
+                assert (pc_out_o == 32'b0);
+                assert (!is_vec_op_o && !is_vsetvl_o);
+                assert (!reg_write_en_o && !mem_read_en_o && !mem_write_en_o);
+                assert (!branch_en_o && !jump_en_o && !jalr_en_o);
+                assert (!is_ecall_o && !is_ebreak_o && !is_mret_o && !is_csr_o);
+            end
+            // stall (且沒有flush) 時內容保持不變
+            if (!$past(flush) && $past(stall)) begin
+                assert (pc_out_o == $past(pc_out_o));
+                assert (is_vec_op_o == $past(is_vec_op_o));
+                assert (funct3_o == $past(funct3_o));
+            end
+        end
+    end
+`endif
+
 endmodule

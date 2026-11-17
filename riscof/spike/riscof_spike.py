@@ -28,9 +28,11 @@ class spike(pluginTemplate):
 
         self.ref_exe = os.path.join(config['PATH'] if 'PATH' in config else "","spike")
         self.num_jobs = str(config['jobs'] if 'jobs' in config else 1)
-        self.pluginpath=os.path.abspath(config['pluginpath'])
-        self.isa_spec = os.path.abspath(config['ispec']) if 'ispec' in config else ''
-        self.platform_spec = os.path.abspath(config['pspec']) if 'ispec' in config else ''
+        # 相對路徑以 config.ini 所在的目錄為基準
+        config_dir = kwargs.get('config_dir', os.getcwd())
+        self.pluginpath = utils.absolute_path(config_dir, config['pluginpath'])
+        self.isa_spec = utils.absolute_path(config_dir, config['ispec']) if 'ispec' in config else ''
+        self.platform_spec = utils.absolute_path(config_dir, config['pspec']) if 'pspec' in config else ''
         self.make = config['make'] if 'make' in config else 'make'
         logger.debug("spike plugin initialised using the following configuration.")
         for entry in config:

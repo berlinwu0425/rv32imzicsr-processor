@@ -6,9 +6,12 @@ obj_dir/
 *.bin
 *.signature
 formal/*/
+!formal/sweep/
+formal/sweep/_work/
 *.bak*
 __pycache__/
 venv*/
 .Xil/
 *.jou
 *.log
+riscof/riscof_work/
